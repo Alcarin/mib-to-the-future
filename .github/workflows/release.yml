@@ -1,0 +1,139 @@
+# .github/workflows/release.yml
+
+name: Release
+
+# Questo workflow si attiva quando un nuovo tag che inizia con 'v' (es. v1.0, v1.0.1) viene pushato.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Permessi necessari per creare release
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Usiamo una "strategy matrix" per compilare su più sistemi operativi e architetture.
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - os: ubuntu-latest
+            platform: linux/amd64
+            output_name: mib-to-the-future-linux-amd64
+          # ARM64 build requires cross-compilation setup (QEMU)
+          # - os: ubuntu-latest
+          #   platform: linux/arm64
+          #   output_name: mib-to-the-future-linux-arm64
+
+          # Windows builds
+          - os: windows-latest
+            platform: windows/amd64
+            output_name: mib-to-the-future-windows-amd64.exe
+          # ARM64 build requires cross-compilation setup
+          # - os: windows-latest
+          #   platform: windows/arm64
+          #   output_name: mib-to-the-future-windows-arm64.exe
+
+          # macOS builds (universal binary support)
+          - os: macos-latest
+            platform: darwin/amd64
+            output_name: mib-to-the-future-darwin-amd64.app
+          - os: macos-latest
+            platform: darwin/arm64
+            output_name: mib-to-the-future-darwin-arm64.app
+
+    # La macchina virtuale da usare, presa dalla matrice sopra.
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # 1. Fa il checkout del tuo codice sorgente.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Imposta Node.js per i test frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # O la versione richiesta dal tuo package.json
+
+      # 3. Installa le dipendenze frontend
+      - name: Install Frontend Dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: ${{ github.workspace }}/frontend
+
+      # 4. Esegui linting
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: ${{ github.workspace }}/frontend
+
+      # 5. Esegui test unitari
+      - name: Run Unit Tests
+        run: npm run test:unit
+        working-directory: ${{ github.workspace }}/frontend
+
+      # 6. Imposta Go per installare Wails
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23' # Versione compatibile con Wails 2.10.2
+
+      # 7. Installa le dipendenze di sistema necessarie per Wails.
+      #    Ubuntu 24.04 ha solo webkit2gtk-4.1, non 4.0
+      - name: Install Dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # 8. Installa Wails CLI tramite Go
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+
+      # 9. Compila l'applicazione Wails per la piattaforma specifica
+      - name: Build Wails App
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41
+          else
+            wails build -clean -platform ${{ matrix.platform }}
+          fi
+        shell: bash
+
+      # 10. Rinomina il binario con nome specifico per OS/arch
+      - name: Rename Binary (Linux)
+        if: startsWith(matrix.platform, 'linux/')
+        run: |
+          mv build/bin/mib-to-the-future build/bin/${{ matrix.output_name }}
+        shell: bash
+
+      - name: Rename Binary (Windows)
+        if: startsWith(matrix.platform, 'windows/')
+        run: |
+          mv build/bin/mib-to-the-future.exe build/bin/${{ matrix.output_name }}
+        shell: bash
+
+      - name: Package and Rename (macOS)
+        if: startsWith(matrix.platform, 'darwin/')
+        run: |
+          # Crea un archivio zip della .app
+          cd build/bin
+          zip -r ${{ matrix.output_name }}.zip mib-to-the-future.app
+          rm -rf mib-to-the-future.app
+        shell: bash
+
+      # 11. Crea la Release su GitHub e carica i binari come artefatti.
+      #    Questa action è molto potente:
+      #    - Crea una release draft.
+      #    - Prende il nome del tag e il messaggio del commit per il titolo/corpo.
+      #    - Cerca i file nella cartella 'build/bin' e li carica.
+      - name: Create Release and Upload Artefacts
+        uses: softprops/action-gh-release@v2
+        with:
+          # Carica i binari rinominati per ogni OS/architettura
+          files: |
+            build/bin/mib-to-the-future-*
+          # Lascia la release come "draft" così puoi revisionarla prima di pubblicarla.
+          # Imposta a 'false' per pubblicare automaticamente.
+          draft: true
