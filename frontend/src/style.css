@@ -1,0 +1,74 @@
+/* ===== Base ===== */
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--md-ref-typeface);
+  font-size: var(--md-sys-typescale-body);
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+}
+
+/* ===== Altezza ridotta per componenti Material Design ===== */
+/* Usiamo le variabili CSS di Material Design invece di forzare con !important */
+md-outlined-text-field {
+  /* Container shape */
+  --md-outlined-field-container-shape: 8px;
+
+  /* Padding verticale per centrare il testo */
+  --md-outlined-field-top-space: 4px;
+  --md-outlined-field-bottom-space: 4px;
+
+  /* Altezza del contenitore */
+  --md-outlined-field-container-height: 40px;
+
+  /* Padding orizzontale */
+  --md-outlined-field-leading-space: 16px;
+  --md-outlined-field-trailing-space: 16px;
+}
+
+md-outlined-select {
+  /* Container shape */
+  --md-outlined-field-container-shape: 8px;
+
+  /* Padding verticale per centrare il testo */
+  --md-outlined-field-top-space: 4px;
+  --md-outlined-field-bottom-space: 4px;
+
+  /* Altezza del contenitore */
+  --md-outlined-field-container-height: 40px;
+
+  /* Padding orizzontale */
+  --md-outlined-field-leading-space: 16px;
+  --md-outlined-field-trailing-space: 16px;
+}
+
+/* ===== Layout app ===== */
+.app-root { min-height: 100vh; display: flex; flex-direction: column; }
+.main-grid {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  gap: var(--md-sys-space-3);
+  padding: var(--md-sys-space-3);
+}
+@media (max-width: 1100px){ .main-grid { grid-template-columns: 1fr; } }
+.section-title {
+  margin: 0 0 .5rem;
+  font-size: var(--md-sys-typescale-title);
+  letter-spacing: .02em;
+  opacity: .9;
+}
+
+.toolbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .75rem; padding: .75rem 1rem;
+  background: color-mix(in oklab, var(--md-sys-color-surface) 86%, black 0%);
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  /* backdrop-filter: blur(6px); */ 
+  background: color-mix(in oklab, var(--md-sys-color-surface) 92%, black 0%);
+}
+.brand { display: flex; align-items: center; gap: .6rem; }
+.brand .title { font-weight: 700; font-size: var(--md-sys-typescale-headline); }
+.toolbar-actions { display: flex; gap: .5rem; }
+
+.help-text { color: var(--md-sys-color-muted); }
