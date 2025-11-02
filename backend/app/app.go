@@ -84,29 +84,16 @@ func (a *App) Startup(ctx context.Context) {
 		return
 	}
 
-	// Controlla se il DB è nuovo e necessita di inizializzazione con MIB di base
-	isNew, err := a.mibDB.IsNew()
-	if err != nil {
-		if a.mibDB != nil {
-			a.mibDB.Close()
-			a.mibDB = nil
-		}
-		a.mibInitErr = fmt.Errorf("failed to check MIB database status: %w", err)
-		runtime.LogError(ctx, a.mibInitErr.Error())
-		return
+	// Precarica i MIB standard comuni all'avvio per evitare errori di dipendenze mancanti
+	runtime.LogInfo(ctx, "Preloading standard MIB modules...")
+	parser := mib.NewParser(a.mibDB)
+	if err := parser.PreloadStandardMIBs(dataDir); err != nil {
+		// Non è un errore fatale, logga e continua
+		runtime.LogWarning(ctx, fmt.Sprintf("Failed to preload some standard MIBs: %v", err))
+	} else {
+		runtime.LogInfo(ctx, "Standard MIBs preloaded successfully")
 	}
 
-	if isNew {
-		runtime.LogInfo(ctx, "New MIB database detected. Loading standard MIBs...")
-		parser := mib.NewParser(a.mibDB)
-		// Carica RFC1213-MIB che definisce la struttura di base (mib-2, system, etc.)
-		// Il nome del modulo è sufficiente, gosmi lo troverà nel suo path
-		// che ora punta alla cartella di dati dell'app dove abbiamo estratto i MIB.
-		// Passiamo dataDir per l'inizializzazione.
-		if _, err := parser.LoadMIBFile("RFC1213-MIB", dataDir); err != nil {
-			runtime.LogError(ctx, fmt.Sprintf("Failed to load standard MIBs: %v", err))
-		}
-	}
 	runtime.LogInfo(ctx, fmt.Sprintf("MIB database ready at: %s", dataDir))
 }
 
