@@ -59,7 +59,7 @@ The project aims to provide a comprehensive tool for both network novices and pr
 
 ### Download Pre-built Binaries
 
-Download the latest release for your platform from the [Releases page](https://github.com/your-username/mib-to-the-future/releases):
+Download the latest release for your platform from the [Releases page](https://github.com/Alcarin/mib-to-the-future/releases):
 
 - **Linux**: `mib-to-the-future-linux-amd64` (x86-64)
 - **Windows**: `mib-to-the-future-windows-amd64.exe` (x86-64)
@@ -165,7 +165,7 @@ Before building from source, you need to install the following tools:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/mib-to-the-future.git
+    git clone https://github.com/Alcarin/mib-to-the-future.git
     cd mib-to-the-future
     ```
 
