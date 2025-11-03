@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -754,7 +755,26 @@ func (d *Database) GetTree() ([]*Node, error) {
 		}
 	}
 
+	sortTreeNodes(roots)
+
 	return roots, nil
+}
+
+// sortTreeNodes ordina ricorsivamente i nodi in base all'OID usando un confronto numerico.
+func sortTreeNodes(nodes []*Node) {
+	if len(nodes) == 0 {
+		return
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		return CompareOIDs(nodes[i].OID, nodes[j].OID) < 0
+	})
+
+	for _, node := range nodes {
+		if len(node.Children) > 0 {
+			sortTreeNodes(node.Children)
+		}
+	}
 }
 
 // getAllNodes recupera tutti i nodi dal database

@@ -1,12 +1,16 @@
 package app
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"mib-to-the-future/backend/mib"
 )
@@ -162,6 +166,14 @@ func formatDateAndTime(raw string) (string, bool) {
 
 // formatBits formatta un valore BITS usando il mapping dal MIB.
 func formatBits(raw string, mapping map[string]string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return "", false
+	}
+	if !strings.HasPrefix(strings.ToLower(trimmed), "0x") {
+		return "", false
+	}
+
 	data, ok := parseHexLikeString(raw)
 	if !ok || len(data) == 0 || len(mapping) == 0 {
 		return "", false
@@ -236,18 +248,210 @@ func formatInetAddress(raw string) (string, bool) {
 
 // formatDisplayString formatta una DisplayString verificando che sia ASCII stampabile.
 func formatDisplayString(raw string) (string, bool) {
-	data, ok := parseHexLikeString(raw)
-	if !ok || len(data) == 0 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return "", false
 	}
 
-	for _, b := range data {
-		if b < 32 && b != 9 && b != 10 && b != 13 {
-			return "", false
+	if data, ok := parseHexLikeString(trimmed); ok && len(data) > 0 {
+		if decoded := decodeTextBytes(data); decoded != "" {
+			return decoded, true
+		}
+		return "", false
+	}
+
+	// raw non è esadecimale: prova a interpretarlo come UTF-8
+	if utf8.ValidString(trimmed) && sanitizedString(trimmed) != "" {
+		return sanitizedString(trimmed), true
+	}
+
+	return "", false
+}
+
+func decodeTextBytes(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	if isPrintableASCIIBytes(data) {
+		if str := sanitizedString(string(data)); str != "" {
+			return str
 		}
 	}
 
-	return string(data), true
+	if utf8.Valid(data) {
+		if str := sanitizedString(string(data)); str != "" {
+			return str
+		}
+	}
+
+	if looksLikeUTF16(data) {
+		if str, ok := decodeUTF16Bytes(data); ok {
+			if s := sanitizedString(str); s != "" {
+				return s
+			}
+		}
+	}
+
+	if looksMostlyLatin1(data) {
+		if str := sanitizedString(decodeLatin1Bytes(data)); str != "" {
+			return str
+		}
+	}
+
+	return ""
+}
+
+func isPrintableASCIIBytes(data []byte) bool {
+	for _, b := range data {
+		if b == 0 {
+			return false
+		}
+		if b < 32 && b != 9 && b != 10 && b != 13 {
+			return false
+		}
+		if b > 126 && b < 160 {
+			return false
+		}
+	}
+	return true
+}
+
+func looksLikeUTF16(data []byte) bool {
+	if len(data) < 2 || len(data)%2 != 0 {
+		return false
+	}
+
+	prefix := binary.BigEndian.Uint16(data[:2])
+	if prefix == 0xFEFF || prefix == 0xFFFE {
+		return true
+	}
+
+	zeroPairs := 0
+	for i := 0; i+1 < len(data); i += 2 {
+		if data[i] == 0 || data[i+1] == 0 {
+			zeroPairs++
+		}
+	}
+
+	return zeroPairs*4 >= len(data)
+}
+
+func decodeUTF16Bytes(data []byte) (string, bool) {
+	if len(data) == 0 || len(data)%2 != 0 {
+		return "", false
+	}
+
+	var (
+		order binary.ByteOrder
+		start int
+	)
+
+	if len(data) >= 2 {
+		switch binary.BigEndian.Uint16(data[:2]) {
+		case 0xFEFF:
+			order = binary.BigEndian
+			start = 2
+		case 0xFFFE:
+			order = binary.LittleEndian
+			start = 2
+		}
+	}
+
+	if order == nil {
+		leScore := 0
+		beScore := 0
+		for i := 0; i < len(data); i += 2 {
+			if data[i] == 0 && data[i+1] != 0 {
+				beScore++
+			}
+			if data[i+1] == 0 && data[i] != 0 {
+				leScore++
+			}
+		}
+
+		if leScore == 0 && beScore == 0 {
+			order = binary.LittleEndian
+		} else if leScore >= beScore {
+			order = binary.LittleEndian
+		} else {
+			order = binary.BigEndian
+		}
+	}
+
+	u16Len := (len(data) - start) / 2
+	u16 := make([]uint16, u16Len)
+	for i, j := start, 0; j < u16Len; i, j = i+2, j+1 {
+		u16[j] = order.Uint16(data[i : i+2])
+	}
+
+	runes := utf16.Decode(u16)
+	return string(runes), true
+}
+
+func looksMostlyLatin1(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	printable := 0
+	for _, b := range data {
+		if b >= 32 || b == '\n' || b == '\r' || b == '\t' {
+			printable++
+		}
+	}
+
+	return printable*100 >= len(data)*70
+}
+
+func decodeLatin1Bytes(data []byte) string {
+	runes := make([]rune, len(data))
+	for i, b := range data {
+		runes[i] = rune(b)
+	}
+	return string(runes)
+}
+
+func sanitizedString(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	stripped := strings.Trim(value, "\x00")
+	stripped = strings.TrimSpace(stripped)
+	if stripped == "" {
+		return ""
+	}
+
+	total := 0
+	printable := 0
+
+	for _, r := range stripped {
+		total++
+		if isPrintableRune(r) {
+			printable++
+		}
+	}
+
+	if total == 0 {
+		return ""
+	}
+
+	if printable*100 < total*85 {
+		return ""
+	}
+
+	return stripped
+}
+
+func isPrintableRune(r rune) bool {
+	if r == 0 {
+		return false
+	}
+	if r == '\n' || r == '\r' || r == '\t' {
+		return true
+	}
+	return unicode.IsGraphic(r) && !unicode.IsControl(r)
 }
 
 // parseEnumMapping estrae il mapping dei valori enumerati dalla sintassi MIB.

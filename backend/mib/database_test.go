@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+// findNodeByOID cerca ricorsivamente un nodo in base al suo OID.
+func findNodeByOID(nodes []*Node, oid string) *Node {
+	for _, node := range nodes {
+		if node.OID == oid {
+			return node
+		}
+		if child := findNodeByOID(node.Children, oid); child != nil {
+			return child
+		}
+	}
+	return nil
+}
+
 // newTestDB crea un database in memoria per i test.
 func newTestDB(t *testing.T) *Database {
 	t.Helper()
@@ -124,6 +137,47 @@ func TestGetTree(t *testing.T) {
 
 	if tree[0].Children[0].Name != "org" {
 		t.Errorf("Child node name = %s, want org", tree[0].Children[0].Name)
+	}
+}
+
+func TestGetTreeOrdersChildrenNumerically(t *testing.T) {
+	db := newTestDB(t)
+	moduleID, _ := db.SaveModule("SORT-MIB", "")
+
+	nodes := []*Node{
+		{OID: "1", Name: "root"},
+		{OID: "1.3", Name: "org", ParentOID: "1"},
+		{OID: "1.3.6", Name: "dod", ParentOID: "1.3"},
+		{OID: "1.3.6.1", Name: "internet", ParentOID: "1.3.6"},
+		{OID: "1.3.6.1.2", Name: "mgmt", ParentOID: "1.3.6.1"},
+		{OID: "1.3.6.1.2.1", Name: "mib-2", ParentOID: "1.3.6.1.2"},
+		{OID: "1.3.6.1.2.1.1", Name: "system", ParentOID: "1.3.6.1.2.1"},
+		{OID: "1.3.6.1.2.1.10", Name: "transmission", ParentOID: "1.3.6.1.2.1"},
+		{OID: "1.3.6.1.2.1.2", Name: "interfaces", ParentOID: "1.3.6.1.2.1"},
+	}
+
+	if err := db.SaveNodes(nodes, moduleID); err != nil {
+		t.Fatalf("SaveNodes() error = %v", err)
+	}
+
+	tree, err := db.GetTree()
+	if err != nil {
+		t.Fatalf("GetTree() error = %v", err)
+	}
+
+	mib2 := findNodeByOID(tree, "1.3.6.1.2.1")
+	if mib2 == nil {
+		t.Fatalf("node mib-2 not found")
+	}
+
+	childNames := []string{}
+	for _, child := range mib2.Children {
+		childNames = append(childNames, child.Name)
+	}
+
+	expected := []string{"system", "interfaces", "transmission"}
+	if !reflect.DeepEqual(childNames, expected) {
+		t.Fatalf("child order = %v, want %v", childNames, expected)
 	}
 }
 

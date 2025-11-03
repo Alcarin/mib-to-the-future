@@ -11,6 +11,82 @@ const tabs = ref([
 ]);
 const activeTabId = ref('log-default');
 
+const coercePort = (value, fallback = 161) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const unwrapHost = (maybeRef) => {
+  if (!maybeRef || typeof maybeRef !== 'object') {
+    return null;
+  }
+  if ('value' in maybeRef && typeof maybeRef.value === 'object' && maybeRef.value !== null) {
+    return maybeRef.value;
+  }
+  return maybeRef;
+};
+
+const snapshotHostConfig = (rawHost) => {
+  const source = unwrapHost(rawHost);
+  if (!source || typeof source !== 'object') {
+    return null;
+  }
+
+  const address = typeof source.address === 'string'
+    ? source.address.trim()
+    : typeof source.host === 'string'
+      ? source.host.trim()
+      : '';
+
+  if (!address) {
+    return null;
+  }
+
+  const version = typeof source.version === 'string' && source.version
+    ? source.version
+    : 'v2c';
+
+  const community = typeof source.community === 'string' && source.community
+    ? source.community
+    : 'public';
+
+  const writeCommunity = typeof source.writeCommunity === 'string' && source.writeCommunity
+    ? source.writeCommunity
+    : community;
+
+  return {
+    address,
+    port: coercePort(source.port, 161),
+    community,
+    writeCommunity,
+    version,
+    contextName: source.contextName ?? '',
+    securityLevel: source.securityLevel ?? '',
+    securityUsername: source.securityUsername ?? '',
+    authProtocol: source.authProtocol ?? '',
+    authPassword: source.authPassword ?? '',
+    privProtocol: source.privProtocol ?? '',
+    privPassword: source.privPassword ?? ''
+  };
+};
+
+const buildHostKey = (snapshot) => {
+  if (!snapshot) {
+    return 'host:unknown';
+  }
+  const version = (snapshot.version ?? 'v2c').toLowerCase();
+  return `host:${snapshot.address}:${snapshot.port}:${version}`;
+};
+
+const formatHostLabel = (snapshot) => {
+  if (!snapshot) {
+    return 'Host sconosciuto';
+  }
+  const suffix = snapshot.port ? `:${snapshot.port}` : '';
+  const version = snapshot.version ? ` · ${snapshot.version}` : '';
+  return `${snapshot.address}${suffix}${version}`;
+};
+
 /**
  * Composable for managing tab state and interactions.
  * @returns {object} Reactive state and methods for tab management.
@@ -93,8 +169,15 @@ export function useTabsManager() {
     }
   };
 
-  const handleOpenTableTab = (oidData) => {
-    const existingTab = tabs.value.find(t => t.type === 'table' && t.oid === oidData.oid);
+  const handleOpenTableTab = (oidData, hostLike = null) => {
+    const hostSnapshot = snapshotHostConfig(hostLike);
+    const hostKey = buildHostKey(hostSnapshot);
+    const displayName = oidData?.name || oidData?.label || oidData?.title || oidData?.oid || 'SNMP Table';
+    const targetOid = oidData?.oid || '';
+
+    const existingTab = tabs.value.find(
+      t => t.type === 'table' && t.oid === targetOid && t.hostKey === hostKey
+    );
     if (existingTab) {
       activeTabId.value = existingTab.id;
       return;
@@ -103,26 +186,35 @@ export function useTabsManager() {
     const newTabId = `table-${Date.now()}`;
     tabs.value.push({
       id: newTabId,
-      title: `Table: ${oidData.name}`,
+      title: `Table: ${displayName}`,
+      displayName,
       type: 'table',
-      oid: oidData.oid,
+      oid: targetOid,
       data: [],
       columns: [],
-      lastUpdated: null
+      lastUpdated: null,
+      hostSnapshot,
+      hostKey,
+      hostLabel: formatHostLabel(hostSnapshot),
+      createdAt: new Date().toISOString()
     });
     nextTick(() => {
       activeTabId.value = newTabId;
     });
   };
 
-  const openGraphTab = (node, instanceId = '') => {
+  const openGraphTab = (node, instanceId = '', hostLike = null) => {
     if (!node || !node.oid) return;
 
+    const hostSnapshot = snapshotHostConfig(hostLike);
+    const hostKey = buildHostKey(hostSnapshot);
     const sanitizedInstance = instanceId ? sanitizeInstanceId(instanceId) : '';
     const targetOid = buildInstanceOid(node.oid, sanitizedInstance);
     selectedOid.value = targetOid;
 
-    const existing = tabs.value.find(tab => tab.type === 'chart' && tab.oid === targetOid);
+    const existing = tabs.value.find(
+      tab => tab.type === 'chart' && tab.oid === targetOid && tab.hostKey === hostKey
+    );
     if (existing) {
       activeTabId.value = existing.id;
       return;
@@ -135,11 +227,16 @@ export function useTabsManager() {
     tabs.value.push({
       id: chartTabId,
       title: `Graph: ${displayName}${suffix}`,
+      displayName,
       type: 'chart',
       oid: targetOid,
       baseOid: node.oid,
       instanceId: sanitizedInstance || null,
       syntax: node.syntax || '',
+      hostSnapshot,
+      hostKey,
+      hostLabel: formatHostLabel(hostSnapshot),
+      createdAt: new Date().toISOString(),
       chartState: {
         pollingInterval: 5,
         isPolling: false,

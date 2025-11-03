@@ -55,7 +55,7 @@ export function useChartPolling(props) {
   }
 
   const buildSnmpConfig = () => {
-    const hc = props.hostConfig || {}
+    const hc = props.tabInfo?.hostSnapshot || props.hostConfig || {}
     const rawAddress = hc.address ?? hc.host ?? ''
     const address = typeof rawAddress === 'string' ? rawAddress.trim() : ''
     if (!address) {

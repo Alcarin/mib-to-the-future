@@ -197,7 +197,7 @@ func (a *App) resolveRowColumns(rowNode *mib.Node) ([]*mib.Node, error) {
 	}
 
 	sort.Slice(columns, func(i, j int) bool {
-		return columns[i].OID < columns[j].OID
+		return mib.CompareOIDs(columns[i].OID, columns[j].OID) < 0
 	})
 
 	return columns, nil

@@ -58,6 +58,7 @@ const sortHostsByRecency = (hosts) =>
 // Global state for hosts, shared across the app
 const host = ref(createDefaultHost());
 const savedHosts = ref([]);
+let hasInitializedHost = false;
 
 /**
  * Composable for managing host state and interactions.
@@ -65,27 +66,29 @@ const savedHosts = ref([]);
  */
 export function useHostManager() {
   const loadSavedHosts = async () => {
-    const currentAddress = host.value.address?.trim?.() ?? '';
-
     try {
       const hosts = await ListHosts();
       const normalized = Array.isArray(hosts) ? hosts.map(normalizeHostRecord) : [];
       savedHosts.value = sortHostsByRecency(normalized);
 
       if (savedHosts.value.length > 0) {
-        const current = savedHosts.value.find(item => item.address === currentAddress);
-        const target = current ?? savedHosts.value[0];
-        host.value = {
-          ...createDefaultHost(),
-          ...target
-        };
+        if (!hasInitializedHost) {
+          const target = savedHosts.value[0];
+          host.value = {
+            ...createDefaultHost(),
+            ...target
+          };
+          hasInitializedHost = true;
+        }
       } else {
         host.value = createDefaultHost();
+        hasInitializedHost = false;
       }
     } catch (error) {
       console.error('Failed to load saved hosts:', error);
       savedHosts.value = [];
       host.value = createDefaultHost();
+      hasInitializedHost = false;
     }
   };
 
@@ -109,6 +112,6 @@ export function useHostManager() {
     savedHosts,
     loadSavedHosts,
     handleDeleteHost,
-    createDefaultHost, // Also expose factory if needed elsewhere
+    createDefaultHost, // Espone anche la factory per riuso esterno
   };
 }

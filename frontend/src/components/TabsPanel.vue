@@ -23,8 +23,7 @@ import '@material/web/iconbutton/icon-button.js'
 
 const props = defineProps({
   tabs: Array,
-  activeTabId: String,
-  hostConfig: Object
+  activeTabId: String
 })
 
 const emit = defineEmits([
@@ -64,9 +63,10 @@ const tabComponentProps = computed(() => {
     tabInfo: tab || null
   }
   if (tab?.type === 'table' || tab?.type === 'chart') {
+    const hostConfig = tab?.hostSnapshot ? { ...tab.hostSnapshot } : null
     return {
       ...base,
-      hostConfig: props.hostConfig || null
+      hostConfig
     }
   }
   return base

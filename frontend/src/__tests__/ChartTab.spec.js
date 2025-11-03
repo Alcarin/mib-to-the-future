@@ -136,6 +136,22 @@ describe('ChartTab', () => {
     wrapper.unmount()
   })
 
+  it('mostra intestazione con host e OID bloccati', async () => {
+    const wrapper = createComponent({
+      tabInfo: {
+        displayName: 'sysUpTime',
+        baseOid: '1.3.6.1.2.1.1.3'
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.chart-header__title').text()).toBe('sysUpTime')
+    expect(wrapper.find('.chart-header__oid').text()).toContain('1.3.6.1.2.1.1.5.0')
+    expect(wrapper.text()).toContain('Host: 192.0.2.10:161 · v2c')
+
+    wrapper.unmount()
+  })
+
   it('emits state updates when polling starts', async () => {
     const isPolling = ref(false)
     startPollingMock.mockImplementation(async () => {

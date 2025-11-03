@@ -98,16 +98,15 @@ onMounted(async () => {
             :is-resizing="isResizing"
             :selected-oid="selectedOid"
             @oid-select="handleOidSelect"
-            @open-table="tabsManager.handleOpenTableTab"
+            @open-table="(node) => tabsManager.handleOpenTableTab(node, host)"
             @request-operation="snmpManager.handleContextOperation"
-            @open-graph="modalManager.handleOpenGraphRequest"
+            @open-graph="(node) => modalManager.handleOpenGraphRequest(node, host)"
           />
         </Pane>
         <Pane>
           <TabsPanel
             v-model:tabs="tabsManager.tabs.value"
             v-model:active-tab-id="tabsManager.activeTabId.value"
-            :host-config="host"
             @add-tab="tabsManager.handleAddTab"
             @update:tabs="tabsManager.handleTabsUpdate"
             @close-tab="tabsManager.handleCloseTab"

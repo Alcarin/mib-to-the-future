@@ -132,6 +132,7 @@ describe('TableTab.vue', () => {
     expect(wrapper.text()).toContain('1000000000')
     expect(wrapper.find('.last-updated').exists()).toBe(true)
     expect(wrapper.text()).toContain('Last updated:')
+    expect(wrapper.text()).toContain('Host: 127.0.0.1:161 · v2c')
   })
 
   it('sorts the table when a header is clicked', async () => {
@@ -161,6 +162,40 @@ describe('TableTab.vue', () => {
     expect(rows[0].text()).toContain('lo')
     expect(rows[1].text()).toContain('eth1')
     expect(rows[2].text()).toContain('eth0')
+  })
+
+  it('sorts numeric string values in natural order', async () => {
+    const columns = [
+      { key: 'idx', label: 'Index', type: 'string' },
+      { key: 'name', label: 'Name', type: 'string' }
+    ]
+    const rows = [
+      { __instance: '1', idx: '1', name: 'alpha' },
+      { __instance: '10', idx: '10', name: 'gamma' },
+      { __instance: '2', idx: '2', name: 'beta' }
+    ]
+
+    const wrapper = mount(TableTab, {
+      props: {
+        tabInfo: { ...baseTabInfo, data: rows, columns },
+        hostConfig
+      }
+    })
+
+    await flushPromises()
+
+    const indexHeader = wrapper.findAll('th').find(w => w.text().includes('Index'))
+    await indexHeader.trigger('click')
+    await nextTick()
+
+    let firstColumn = wrapper.findAll('.data-row').map(row => row.findAll('td')[0].text().trim())
+    expect(firstColumn).toEqual(['1', '2', '10'])
+
+    await indexHeader.trigger('click')
+    await nextTick()
+
+    firstColumn = wrapper.findAll('.data-row').map(row => row.findAll('td')[0].text().trim())
+    expect(firstColumn).toEqual(['10', '2', '1'])
   })
 
   it('filters the table based on search query', async () => {

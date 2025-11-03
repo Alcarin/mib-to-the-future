@@ -79,6 +79,26 @@ describe('useHostManager', () => {
     expect(manager.host.value.address).toBe('127.0.0.1')
   })
 
+  it('non sostituisce la configurazione corrente dopo l\'inizializzazione', async () => {
+    const { appBridge, manager } = await setup()
+    appBridge.ListHosts.mockResolvedValue([
+      { address: '10.0.0.2', lastUsedAt: '2024-03-01T09:30:00Z' },
+      { address: '10.0.0.1', lastUsedAt: '2024-02-01T10:00:00Z' },
+    ])
+
+    await manager.loadSavedHosts()
+
+    manager.host.value.address = '192.168.0.50'
+    appBridge.ListHosts.mockResolvedValue([
+      { address: '10.0.0.2', lastUsedAt: '2024-03-01T09:30:00Z' },
+    ])
+
+    await manager.loadSavedHosts()
+
+    expect(manager.host.value.address).toBe('192.168.0.50')
+    expect(manager.savedHosts.value[0].address).toBe('10.0.0.2')
+  })
+
   it('chiama DeleteHost e ricarica la lista dopo la cancellazione', async () => {
     const { appBridge, manager } = await setup()
     appBridge.ListHosts.mockResolvedValueOnce([{ address: 'a', lastUsedAt: '2024-01-01' }])

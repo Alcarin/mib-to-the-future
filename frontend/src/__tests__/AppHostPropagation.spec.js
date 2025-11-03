@@ -20,25 +20,14 @@ vi.mock('../components/TopBar.vue', () => ({
   }
 }))
 
-vi.mock('../components/TabsPanel.vue', () => {
-  const { defineComponent, h, computed } = require('vue')
-  return {
-    default: defineComponent({
-      name: 'TabsPanel',
-      props: {
-        tabs: { type: Array, default: () => [] },
-        activeTabId: { type: [String, Number], default: null },
-        hostConfig: { type: Object, default: () => ({}) }
-      },
-      emits: ['add-tab', 'update:tabs', 'close-tab', 'log-entry-select', 'table-data-updated', 'chart-state-updated'],
-      setup(props, { expose }) {
-        const host = computed(() => props.hostConfig)
-        expose({ host })
-        return () => h('div', { class: 'tabs-panel-stub', 'data-host-address': host.value?.address ?? '' })
-      }
-    })
+vi.mock('../components/TabsPanel.vue', () => ({
+  default: {
+    name: 'TabsPanel',
+    props: ['tabs', 'activeTabId'],
+    emits: ['add-tab', 'update:tabs', 'close-tab', 'log-entry-select', 'table-data-updated', 'chart-state-updated'],
+    template: '<div class="tabs-panel-stub" />'
   }
-})
+}))
 
 vi.mock('../components/MibManagerDialog.vue', () => ({
   default: {
@@ -108,46 +97,50 @@ const logTab = {
   data: []
 }
 
+const tabsManagerMock = {
+  tabs: { value: [logTab] },
+  activeTabId: { value: 'log-default' },
+  handleAddTab: vi.fn(),
+  handleTabsUpdate: vi.fn(),
+  handleCloseTab: vi.fn(),
+  handleTableDataUpdate: vi.fn(),
+  handleChartStateUpdate: vi.fn(),
+  handleOpenTableTab: vi.fn(),
+  openGraphTab: vi.fn(),
+  findTargetLogTab: () => logTab,
+  prependLogEntry: vi.fn(),
+  replaceLogEntry: vi.fn()
+}
+
 vi.mock('../composables/useTabsManager', () => ({
-  useTabsManager: () => ({
-    tabs: { value: [logTab] },
-    activeTabId: { value: 'log-default' },
-    handleAddTab: vi.fn(),
-    handleTabsUpdate: vi.fn(),
-    handleCloseTab: vi.fn(),
-    handleTableDataUpdate: vi.fn(),
-    handleChartStateUpdate: vi.fn(),
-    handleOpenTableTab: vi.fn(),
-    openGraphTab: vi.fn(),
-    findTargetLogTab: () => logTab,
-    prependLogEntry: vi.fn(),
-    replaceLogEntry: vi.fn()
-  })
+  useTabsManager: () => tabsManagerMock
 }))
 
+const modalManagerMock = {
+  showMibManager: { value: false },
+  graphInstanceModal: { visible: false, node: null, host: null },
+  operationInstanceModal: { visible: false, node: null, operation: null, setPayload: null },
+  setOperationModal: {
+    visible: false,
+    node: null,
+    loadingCurrent: false,
+    loadError: '',
+    currentValue: null
+  },
+  handleLoadMib: vi.fn(),
+  handleGraphInstanceConfirm: vi.fn(),
+  handleGraphInstanceCancel: vi.fn(),
+  handleOperationInstanceConfirm: vi.fn(),
+  handleOperationInstanceCancel: vi.fn(),
+  handleSetModalConfirm: vi.fn(),
+  handleSetModalCancel: vi.fn(),
+  openSetModalForOid: vi.fn(),
+  openOperationInstanceModal: vi.fn(),
+  handleOpenGraphRequest: vi.fn()
+}
+
 vi.mock('../composables/useModalManager', () => ({
-  useModalManager: () => ({
-    showMibManager: { value: false },
-    graphInstanceModal: { visible: false, node: null },
-    operationInstanceModal: { visible: false, node: null, operation: null, setPayload: null },
-    setOperationModal: {
-      visible: false,
-      node: null,
-      loadingCurrent: false,
-      loadError: '',
-      currentValue: null
-    },
-    handleLoadMib: vi.fn(),
-    handleGraphInstanceConfirm: vi.fn(),
-    handleGraphInstanceCancel: vi.fn(),
-    handleOperationInstanceConfirm: vi.fn(),
-    handleOperationInstanceCancel: vi.fn(),
-    handleSetModalConfirm: vi.fn(),
-    handleSetModalCancel: vi.fn(),
-    openSetModalForOid: vi.fn(),
-    openOperationInstanceModal: vi.fn(),
-    handleOpenGraphRequest: vi.fn()
-  })
+  useModalManager: () => modalManagerMock
 }))
 
 vi.mock('../composables/useSnmp', () => ({
@@ -189,10 +182,20 @@ describe('App host propagation', () => {
     const wrapper = createAppWrapper()
     await flushPromises()
 
-    const tabsPanel = wrapper.findComponent({ name: 'TabsPanel' })
-    expect(tabsPanel.exists()).toBe(true)
+    const sidebar = wrapper.findComponent({ name: 'MibTreeSidebar' })
+    expect(sidebar.exists()).toBe(true)
 
-    expect(tabsPanel.vm.$props.hostConfig.address).toBe('198.51.100.7')
+    sidebar.vm.$emit('open-table', { oid: '1.3.6.1.2.1.2', name: 'ifTable' })
+    expect(tabsManagerMock.handleOpenTableTab).toHaveBeenCalledWith(
+      expect.objectContaining({ oid: '1.3.6.1.2.1.2' }),
+      expect.objectContaining({ address: '198.51.100.7' })
+    )
+
+    sidebar.vm.$emit('open-graph', { oid: '1.3.6.1.2.1.1.3.0', type: 'scalar' })
+    expect(modalManagerMock.handleOpenGraphRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ oid: '1.3.6.1.2.1.1.3.0', type: 'scalar' }),
+      expect.objectContaining({ address: '198.51.100.7' })
+    )
 
     wrapper.unmount()
   })

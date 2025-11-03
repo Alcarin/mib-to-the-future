@@ -12,6 +12,7 @@ const showMibManager = ref(false);
 const graphInstanceModal = reactive({
   visible: false,
   node: null,
+  host: null,
 });
 
 const setOperationModal = reactive({
@@ -42,6 +43,7 @@ export function useModalManager(snmpContext, tabsContext) {
   const resetGraphInstanceModal = () => {
     graphInstanceModal.visible = false;
     graphInstanceModal.node = null;
+    graphInstanceModal.host = null;
   };
 
   const resetSetOperationModal = () => {
@@ -66,11 +68,12 @@ export function useModalManager(snmpContext, tabsContext) {
 
   const handleGraphInstanceConfirm = (instanceId) => {
     const node = graphInstanceModal.node;
+    const host = graphInstanceModal.host;
     resetGraphInstanceModal();
     if (!node) {
       return;
     }
-    tabsContext.openGraphTab(node, instanceId);
+    tabsContext.openGraphTab(node, instanceId, host);
   };
 
   const handleGraphInstanceCancel = () => {
@@ -198,7 +201,7 @@ export function useModalManager(snmpContext, tabsContext) {
     }
   };
 
-  const handleOpenGraphRequest = (node) => {
+  const handleOpenGraphRequest = (node, hostLike = null) => {
     if (!node || !node.oid) {
       return;
     }
@@ -209,11 +212,12 @@ export function useModalManager(snmpContext, tabsContext) {
 
     if (originalType === 'column') {
       graphInstanceModal.node = node;
+      graphInstanceModal.host = hostLike ? { ...hostLike } : null;
       graphInstanceModal.visible = true;
       return;
     }
 
-    tabsContext.openGraphTab(node);
+    tabsContext.openGraphTab(node, '', hostLike);
   };
 
   /**

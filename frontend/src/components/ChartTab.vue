@@ -43,6 +43,36 @@ const emit = defineEmits(['state-update'])
 
 const { handleError } = useErrorHandler()
 
+const hostSnapshot = computed(() => props.tabInfo?.hostSnapshot || props.hostConfig || null)
+
+const hostLabel = computed(() => {
+  const snapshot = hostSnapshot.value
+  if (!snapshot || !snapshot.address) {
+    return ''
+  }
+  const port = snapshot.port ? `:${snapshot.port}` : ''
+  const version = snapshot.version ? ` · ${snapshot.version}` : ''
+  return `${snapshot.address}${port}${version}`
+})
+
+const chartTitle = computed(() => {
+  if (props.tabInfo?.displayName) {
+    return props.tabInfo.displayName
+  }
+  const title = props.tabInfo?.title || ''
+  if (title.toLowerCase().startsWith('graph:')) {
+    const [, ...rest] = title.split(':')
+    const trimmed = rest.join(':').trim()
+    if (trimmed) {
+      return trimmed
+    }
+  }
+  return title || props.tabInfo?.oid || 'SNMP Chart'
+})
+
+const numericOid = computed(() => props.tabInfo?.oid || '')
+const baseOid = computed(() => props.tabInfo?.baseOid || '')
+
 // Initialize polling composable
 const {
   pollingInterval,
@@ -608,6 +638,24 @@ defineExpose({ exportSamples })
 
 <template>
   <div class="chart-tab">
+    <header class="chart-header">
+      <div class="chart-header__info">
+        <h3 class="chart-header__title">{{ chartTitle }}</h3>
+        <div class="chart-header__oids">
+          <span v-if="numericOid" class="chart-header__oid">{{ numericOid }}</span>
+          <span
+            v-if="baseOid && baseOid !== numericOid"
+            class="chart-header__oid chart-header__oid--base"
+          >
+            Base: {{ baseOid }}
+          </span>
+        </div>
+      </div>
+      <div class="chart-header__meta">
+        <span v-if="hostLabel" class="chart-header__host">Host: {{ hostLabel }}</span>
+      </div>
+    </header>
+
     <section class="chart-controls">
       <div class="chart-controls__left">
         <md-outlined-text-field
@@ -715,6 +763,59 @@ defineExpose({ exportSamples })
   padding: var(--spacing-md, 16px);
   background-color: var(--md-sys-color-surface-container);
   color: var(--md-sys-color-on-surface);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-lg, 24px);
+  flex-wrap: wrap;
+}
+
+.chart-header__info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-header__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.chart-header__oids {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.chart-header__oid {
+  padding: 2px 8px;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--md-sys-color-surface-container-highest);
+  font-family: 'Courier New', monospace;
+}
+
+.chart-header__oid--base {
+  background-color: var(--md-sys-color-surface-container);
+}
+
+.chart-header__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+}
+
+.chart-header__host {
+  padding: 2px 10px;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--md-sys-color-surface-container-high);
 }
 
 .chart-controls {

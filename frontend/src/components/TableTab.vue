@@ -30,19 +30,119 @@ const emit = defineEmits(['data-updated'])
 
 const { handleError, lastError } = useErrorHandler()
 
+const NUMERIC_COLUMN_HINTS = [
+  'number',
+  'integer',
+  'counter',
+  'gauge',
+  'timeticks',
+  'unsigned',
+  'float',
+  'double',
+  'numeric'
+]
+
 const loading = ref(false)
 const sortColumn = ref('')
 const sortDirection = ref('asc')
 const searchQuery = ref('')
 let requestToken = 0
 
+const hostSnapshot = computed(() => props.tabInfo?.hostSnapshot || props.hostConfig || null)
+
+const hostLabel = computed(() => {
+  const snapshot = hostSnapshot.value
+  if (!snapshot || !snapshot.address) {
+    return ''
+  }
+  const port = snapshot.port ? `:${snapshot.port}` : ''
+  const version = snapshot.version ? ` · ${snapshot.version}` : ''
+  return `${snapshot.address}${port}${version}`
+})
+
+const tableName = computed(() => {
+  if (props.tabInfo?.displayName) {
+    return props.tabInfo.displayName
+  }
+  const title = props.tabInfo?.title || ''
+  if (title.toLowerCase().startsWith('table:')) {
+    const [, ...rest] = title.split(':')
+    const trimmed = rest.join(':').trim()
+    if (trimmed) {
+      return trimmed
+    }
+  }
+  if (title) {
+    return title
+  }
+  return props.tabInfo?.oid || 'MIB Table'
+})
+
+const numericOid = computed(() => props.tabInfo?.oid || '')
+
 const coercePort = (value) => {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 161
 }
 
+const isValueEmpty = (value) => value === null || value === undefined || value === ''
+
+const parseFiniteNumber = (value) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return null
+    }
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+const isLikelyNumericColumn = (column) => {
+  if (!column) {
+    return false
+  }
+  const type = String(column.type ?? '').toLowerCase()
+  const syntax = String(column.syntax ?? '').toLowerCase()
+
+  return NUMERIC_COLUMN_HINTS.some((hint) => type.includes(hint) || syntax.includes(hint))
+}
+
+const compareTableValues = (aVal, bVal, column) => {
+  const aEmpty = isValueEmpty(aVal)
+  const bEmpty = isValueEmpty(bVal)
+
+  if (aEmpty && bEmpty) {
+    return 0
+  }
+  if (aEmpty) {
+    return 1
+  }
+  if (bEmpty) {
+    return -1
+  }
+
+  const numericColumn = isLikelyNumericColumn(column)
+  const aNum = parseFiniteNumber(aVal)
+  const bNum = parseFiniteNumber(bVal)
+
+  if (numericColumn || (aNum !== null && bNum !== null)) {
+    if (aNum !== null && bNum !== null) {
+      return aNum - bNum
+    }
+  }
+
+  const aStr = String(aVal ?? '')
+  const bStr = String(bVal ?? '')
+  return aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' })
+}
+
 const buildSnmpConfig = () => {
-  const host = props.hostConfig ?? {}
+  const host = hostSnapshot.value ?? {}
   const address = host.address?.trim?.()
   if (!address) {
     return null
@@ -89,27 +189,11 @@ const filteredData = computed(() => {
 
   if (sortColumn.value) {
     const columnDef = cols.find(column => column?.key === sortColumn.value)
-    const columnType = columnDef?.type ?? 'string'
-
     result = [...result].sort((a, b) => {
       const aVal = a?.[sortColumn.value]
       const bVal = b?.[sortColumn.value]
-
-      if (columnType === 'number') {
-        const aNum = typeof aVal === 'number' ? aVal : Number(aVal)
-        const bNum = typeof bVal === 'number' ? bVal : Number(bVal)
-
-        if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
-          return sortDirection.value === 'asc' ? aNum - bNum : bNum - aNum
-        }
-      }
-
-      const aStr = String(aVal ?? '').toLowerCase()
-      const bStr = String(bVal ?? '').toLowerCase()
-      if (sortDirection.value === 'asc') {
-        return aStr.localeCompare(bStr)
-      }
-      return bStr.localeCompare(aStr)
+      const comparison = compareTableValues(aVal, bVal, columnDef)
+      return sortDirection.value === 'asc' ? comparison : -comparison
     })
   }
 
@@ -299,25 +383,6 @@ watch(
   }
 )
 
-watch(
-  () => [
-    props.hostConfig?.address,
-    props.hostConfig?.port,
-    props.hostConfig?.community,
-    props.hostConfig?.version
-  ],
-  (newValues, oldValues) => {
-    if (!oldValues) {
-      return
-    }
-    const changed = newValues.some((value, index) => value !== oldValues[index])
-    if (changed) {
-      // Host config changed, always reload
-      loadTableData()
-    }
-  }
-)
-
 onMounted(() => {
   // Load data only if it's not already present in the tab state
   if (!props.tabInfo?.data || props.tabInfo.data.length === 0) {
@@ -331,8 +396,11 @@ onMounted(() => {
     <!-- Toolbar -->
     <div class="table-toolbar">
       <div class="toolbar-left">
-        <h3 class="table-title">{{ tabInfo?.title || 'MIB Table' }}</h3>
-        <span class="table-oid">{{ tabInfo?.oid }}</span>
+        <div class="title-group">
+          <h3 class="table-title">{{ tableName }}</h3>
+          <span v-if="numericOid" class="table-oid">{{ numericOid }}</span>
+        </div>
+        <span v-if="hostLabel" class="table-host">Host: {{ hostLabel }}</span>
       </div>
       <div class="toolbar-center">
         <span v-if="tabInfo?.lastUpdated" class="last-updated">
@@ -433,9 +501,16 @@ onMounted(() => {
 
 .toolbar-left {
   display: flex;
-  align-items: baseline;
-  gap: var(--spacing-md);
+  align-items: center;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
   flex-shrink: 0;
+}
+
+.title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .toolbar-center {
@@ -466,6 +541,14 @@ onMounted(() => {
   color: var(--md-sys-color-on-surface-variant);
   background-color: var(--md-sys-color-surface-container-highest);
   padding: 2px 8px;
+  border-radius: var(--border-radius-sm);
+}
+
+.table-host {
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  background-color: var(--md-sys-color-surface-container);
+  padding: 2px 10px;
   border-radius: var(--border-radius-sm);
 }
 
@@ -537,6 +620,11 @@ onMounted(() => {
 .data-table td {
   padding: 12px 16px;
   color: var(--md-sys-color-on-surface);
+}
+
+.data-table td span {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .loading-state,

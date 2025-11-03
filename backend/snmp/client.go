@@ -386,8 +386,8 @@ func formatPDUValue(pdu gosnmp.SnmpPDU) string {
 	switch pdu.Type {
 	case gosnmp.OctetString, gosnmp.BitString:
 		if data, ok := toByteSlice(pdu.Value); ok {
-			if isPrintableASCII(data) {
-				return string(data)
+			if len(data) == 0 {
+				return ""
 			}
 			return "0x" + hex.EncodeToString(data)
 		}

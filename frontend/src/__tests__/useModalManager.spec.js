@@ -63,22 +63,25 @@ describe('useModalManager', () => {
   it('richiede conferma per i grafici con istanza e delega a openGraphTab', async () => {
     const { manager, tabsContext } = await createManager()
     const node = { oid: '1.2.3', type: 'column' }
-    manager.handleOpenGraphRequest(node)
+    const host = { address: '192.0.2.5', port: 161 }
+    manager.handleOpenGraphRequest(node, host)
 
     expect(manager.graphInstanceModal.visible).toBe(true)
     expect(manager.graphInstanceModal.node).toMatchObject(node)
+    expect(manager.graphInstanceModal.host).toMatchObject(host)
     expect(tabsContext.openGraphTab).not.toHaveBeenCalled()
 
     manager.handleGraphInstanceConfirm(' 0 ')
-    expect(tabsContext.openGraphTab).toHaveBeenCalledWith(node, ' 0 ')
+    expect(tabsContext.openGraphTab).toHaveBeenCalledWith(node, ' 0 ', host)
     expect(manager.graphInstanceModal.visible).toBe(false)
   })
 
   it('apre direttamente il grafico per nodi scalari', async () => {
     const { manager, tabsContext } = await createManager()
     const node = { oid: '1.2.3', type: 'scalar' }
-    manager.handleOpenGraphRequest(node)
-    expect(tabsContext.openGraphTab).toHaveBeenCalledWith(node)
+    const host = { address: '192.0.2.5', port: 161 }
+    manager.handleOpenGraphRequest(node, host)
+    expect(tabsContext.openGraphTab).toHaveBeenCalledWith(node, '', host)
   })
 
   it('mostra il modal SET e carica il valore corrente', async () => {

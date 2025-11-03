@@ -14,6 +14,20 @@ const setup = async () => {
   return module.useTabsManager()
 }
 
+const hostA = {
+  address: '192.0.2.10',
+  port: 161,
+  community: 'public',
+  version: 'v2c'
+}
+
+const hostB = {
+  address: '198.51.100.5',
+  port: 162,
+  community: 'public',
+  version: 'v2c'
+}
+
 describe('useTabsManager', () => {
   beforeEach(() => {
     selectedOid.value = ''
@@ -56,26 +70,43 @@ describe('useTabsManager', () => {
     expect(manager.activeTabId.value).toBe('log-default')
   })
 
-  it('crea un tab tabellare solo se non esiste già', async () => {
+  it('crea un tab tabellare solo se non esiste già sullo stesso host', async () => {
     const manager = await setup()
     vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
 
-    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' })
+    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' }, hostA)
     await nextTick()
     expect(manager.tabs.value).toHaveLength(2)
+    expect(manager.tabs.value[1].hostSnapshot).toMatchObject({ address: '192.0.2.10' })
 
-    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' })
+    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' }, hostA)
     await nextTick()
 
     expect(manager.tabs.value).toHaveLength(2)
     expect(manager.activeTabId.value).toMatch(/^table-/)
   })
 
+  it('permette tab distinti per lo stesso OID su host diversi', async () => {
+    const manager = await setup()
+    vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+
+    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' }, hostA)
+    await nextTick()
+    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' }, hostB)
+    await nextTick()
+
+    expect(manager.tabs.value.filter(tab => tab.type === 'table')).toHaveLength(2)
+    const hostLabels = manager.tabs.value
+      .filter(tab => tab.type === 'table')
+      .map(tab => tab.hostLabel)
+    expect(hostLabels).toEqual(expect.arrayContaining(['192.0.2.10:161 · v2c', '198.51.100.5:162 · v2c']))
+  })
+
   it('apre un tab grafico e imposta selectedOid correttamente', async () => {
     const manager = await setup()
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
 
-    manager.openGraphTab({ oid: '1.3.6.1.2', name: 'sysUpTime', syntax: 'TimeTicks' }, '  .0 ')
+    manager.openGraphTab({ oid: '1.3.6.1.2', name: 'sysUpTime', syntax: 'TimeTicks' }, '  .0 ', hostA)
     await nextTick()
 
     expect(selectedOid.value).toBe('1.3.6.1.2.0')
@@ -88,9 +119,25 @@ describe('useTabsManager', () => {
     expect(manager.activeTabId.value).toBe('chart-1700000000000')
 
     // Seconda chiamata deve riutilizzare il tab esistente
-    manager.openGraphTab({ oid: '1.3.6.1.2', name: 'sysUpTime' }, '0')
+    manager.openGraphTab({ oid: '1.3.6.1.2', name: 'sysUpTime' }, '0', hostA)
     await nextTick()
     expect(manager.tabs.value).toHaveLength(2)
+
+    nowSpy.mockRestore()
+  })
+
+  it('consente grafici distinti per lo stesso OID su host differenti', async () => {
+    const manager = await setup()
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+
+    manager.openGraphTab({ oid: '1.3.6.1.4', name: 'sysInOctets' }, '', hostA)
+    await nextTick()
+    manager.openGraphTab({ oid: '1.3.6.1.4', name: 'sysInOctets' }, '', hostB)
+    await nextTick()
+
+    const chartTabs = manager.tabs.value.filter(tab => tab.type === 'chart')
+    expect(chartTabs).toHaveLength(2)
+    expect(chartTabs.map(tab => tab.hostLabel)).toEqual(expect.arrayContaining(['192.0.2.10:161 · v2c', '198.51.100.5:162 · v2c']))
 
     nowSpy.mockRestore()
   })
@@ -98,7 +145,7 @@ describe('useTabsManager', () => {
   it('aggiorna i dati tabellari e aggiunge metadati di refresh', async () => {
     const manager = await setup()
     vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
-    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' })
+    manager.handleOpenTableTab({ oid: '1.2.3', name: 'ifTable' }, hostA)
     await nextTick()
 
     const tableTabId = manager.tabs.value[1].id
@@ -116,7 +163,7 @@ describe('useTabsManager', () => {
   it('aggiorna lo stato del grafico normalizzando i campioni', async () => {
     const manager = await setup()
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
-    manager.openGraphTab({ oid: '1.2.3', name: 'sysInOctets' })
+    manager.openGraphTab({ oid: '1.2.3', name: 'sysInOctets' }, '', hostA)
     await nextTick()
 
     const chartTab = manager.tabs.value[1]
